@@ -1,5 +1,7 @@
 # Validation, Structured Output, Verification, and Reporting
 
+For a Codex full audit, use the append-only finding chain in [references/CODEX-HARNESS.md](references/CODEX-HARNESS.md): hunter `proposal`, fresh-worker `validation`, and, outside the `quick` profile, fresh-worker `verification`. Accept and export only records that pass the harness independence gate. A final verifier that materially changes a record starts another independent validation cycle; it is not accepted in place.
+
 ### Phase 3: Independently validate every candidate
 
 After the clean coverage-critic pass or an explicitly recorded early stop, consolidate Phase 2 candidates and carried same-source prior confirmations by stable fingerprint and root cause. Give every unique proposed `confirmed` and `needs_validation` candidate to a fresh `general` verifier that did not hunt it. A carried prior confirmation follows the same current verification path even though hunters exclude that unchanged root cause. A verifier may read hunter or prior artifacts but must re-read every cited current source location and independently run any decisive check it can reproduce safely.

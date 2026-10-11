@@ -1,5 +1,7 @@
 # Vulnerability Hunting
 
+For a Codex full audit, persist each assignment as a `hunt` task using [references/CODEX-HARNESS.md](references/CODEX-HARNESS.md). Claim it before starting the hunter, complete or fail it immediately after the worker returns, and ingest each schema-shaped candidate as a `proposal` record. The parent still owns all ledger transitions and retained artifact promotion.
+
 ### Phase 2: Run coverage-led hunting waves
 
 The parent assigns `planned` ledger units to `general` agents. Use enough focused hunters to cover the units without combining unrelated boundaries. One hunter may own closely related units in one subsystem; no unit may be silently unassigned because of an agent-count limit — a unit the budget cannot reach is explicitly `deferred` with reason `budget_cannot_reserve_critics_and_validation`.
