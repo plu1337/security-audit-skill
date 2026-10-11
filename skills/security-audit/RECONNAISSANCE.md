@@ -1,5 +1,7 @@
 # Reconnaissance
 
+For a Codex full audit, initialize the durable run first using [references/CODEX-HARNESS.md](references/CODEX-HARNESS.md). Enqueue and claim each reconnaissance role as a separate `recon` task before delegation, then persist its exact structured result before synthesizing shared files. The SQLite queue is orchestration state; `architecture.md` and `coverage-ledger.json` remain the parent-owned evidence and coverage artifacts defined below.
+
 ### Phase 1: Map the source and plan coverage
 
 The parent initializes `run-metadata.json`, applies the strict pre-reconnaissance budget gate in `SKILL.md`, then creates agent scratch roots and the shared ledger before hunting. If the gate fails, record the incomplete status in metadata and launch no reconnaissance agent. Reconnaissance reads the target and locally available build/configuration state only. It does not contact deployed endpoints, external identity providers, registries, brokers, cloud APIs, or other shared services.

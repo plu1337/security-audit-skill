@@ -1,6 +1,6 @@
 ---
 name: security-audit
-description: Security guidance and vulnerability review for codebases, APIs, services, CLI tools, libraries, and daemons. Use for security questions, focused reviews, vulnerability research, security audits, or pen tests. Run the complete workflow only for explicit codebase audit or pen-test requests, full/comprehensive/end-to-end reviews, or requested report artifacts.
+description: Security guidance and a persistent Codex vulnerability harness for codebases, APIs, services, CLI tools, libraries, and daemons. Use for security questions, focused reviews, vulnerability research, security audits, or pen tests. Run the complete workflow only for explicit codebase audit or pen-test requests, full/comprehensive/end-to-end reviews, or requested report artifacts.
 ---
 
 # Security Audit
@@ -28,6 +28,8 @@ This skill is agent-neutral:
 
 Use equivalent platform capabilities while preserving role, write-isolation, prompt, and independence boundaries.
 
+On Codex, the root task is the parent and collaboration agents are isolated workers. For every full audit, read [references/CODEX-HARNESS.md](references/CODEX-HARNESS.md) and use `scripts/vuln_harness.py` as the durable task and finding control plane. Enqueue and claim work before delegation, persist each result immediately, and never let one worker validate its own finding. If independent workers are unavailable, record the run as incomplete rather than simulating independence in one context.
+
 ## Universal execution safety
 
 These rules apply in both operating modes. Source inspection is read-only. Run target-controlled builds, tests, processes, browsers, emulators, fuzzers, and fixture processing only inside an OS-enforced sandbox that provides all of these controls:
@@ -46,6 +48,8 @@ Use dummy principals, fixtures, and secrets. Do not probe deployed endpoints, ex
 In full audit mode, resolve these values before reconnaissance:
 
 - **Skill directory**: the absolute directory containing this `SKILL.md`.
+- **Harness program**: `<skill-dir>/scripts/vuln_harness.py`.
+- **Harness database**: `<output-dir>/harness.sqlite3`, initialized once by the harness program and never edited directly.
 - **Target**: the absolute repository root under review.
 - **Repo name**: a stable repository identifier from the directory or local Git remote.
 - **Output directory**: a new writable directory outside the target, defaulting to `~/security-audit-skill/<repo-name>/run-<N>`, where `<N>` is the next unused integer. Use a directory inside the target only when the user explicitly selects it and the parent verifies that version control ignores the whole directory. Otherwise stop and request an external path.
@@ -53,7 +57,7 @@ In full audit mode, resolve these values before reconnaissance:
 
 ### Write isolation
 
-The parent creates and is the only writer of shared run files:
+The parent, through trusted harness code where applicable, creates and is the only writer of shared run files:
 
 - `run-metadata.json`
 - `architecture.md`
@@ -83,7 +87,7 @@ Before execution, the parent opens and retains trusted, non-inheritable director
 
 For a reproduced check, record the command, exact test input, sandbox limits, and only the allowlisted environment variable names plus safe non-secret values needed to reproduce it. Never capture or copy the ambient environment, inherited variables, credential values, authentication state, or unrelated host paths. Launch from an empty environment rather than trying to redact one after execution.
 
-Before delegation, the parent writes `run-metadata.json` with at least `run_id`, `repo`, `target`, `source_ref`, `profile`, `scope_paths`, `budget` (null if unset), `execution_policy: "sandboxed-source-and-local-only"`, selected companion files, prior-run paths, shared-file owners, and `run_status: "in_progress"`. Update metadata only when those facts change; candidate state belongs in the coverage ledger and `findings.json`.
+Before delegation, initialize the harness database as described in [references/CODEX-HARNESS.md](references/CODEX-HARNESS.md), then export `run-metadata.json` with at least `run_id`, `repo`, `target`, `source_ref`, `profile`, `scope_paths`, `budget` (null if unset), `execution_policy: "sandboxed-source-and-local-only"`, selected companion files, prior-run paths, shared-file owners, and `run_status: "in_progress"`. Update metadata only when those facts change; candidate state belongs in the coverage ledger and the harness finding chain. Materialized `findings.json` contains only accepted independently checked records.
 
 ## Full audit planning
 
@@ -167,16 +171,16 @@ For each confirmed finding, identify the invariant the code must enforce and the
 
 ## Full audit workflow
 
-In full audit mode, follow all six phases in order:
+In full audit mode, use the durable Codex loop in [references/CODEX-HARNESS.md](references/CODEX-HARNESS.md) and follow all six phases in order:
 
 1. **Reconnaissance** — map the source, trust boundaries, local build paths, companion selections, prior evidence, and initial deterministic coverage ledger with [RECONNAISSANCE.md](RECONNAISSANCE.md).
 2. **Coverage-led hunting waves** — assign isolated hunters from the ledger and collect structured candidate results with [HUNTING.md](HUNTING.md), [ATTACK-CLASSES.md](ATTACK-CLASSES.md), and the selected domain companions.
 3. **Candidate validation** — consolidate fingerprints and give every candidate to a fresh source verifier as defined in [VALIDATION-AND-REPORTING.md](VALIDATION-AND-REPORTING.md).
-4. **Structured output** — write all final `confirmed`, `needs_validation`, and `rejected` records to `findings.json`; validate it with `report-schema.json` and `validate-findings.cjs`, and validate the coverage claim with `validate-coverage-ledger.cjs`.
+4. **Structured output** — ingest and accept all final `confirmed`, `needs_validation`, and `rejected` records through the harness, export `findings.json`, validate it with `report-schema.json` and `validate-findings.cjs`, and validate the coverage claim with `validate-coverage-ledger.cjs`.
 5. **Independent record verification** — use fresh agents to verify final source claims and reconcile corrections or state changes.
 6. **Target-neutral report** — derive `REPORT.md`, `FINDINGS-DETAIL.md`, and `NEEDS-VALIDATION.md` from the final records, with no live-probe instructions.
 
-Do not end the run before one of exactly two terminal states: (a) all Phase 6 artifacts are written and both validators pass, or (b) `run_status: "incomplete"` is recorded with its exact reason and the gap is disclosed in the report. Never stop mid-phase.
+Do not end the run before one of exactly two terminal states: (a) all Phase 6 artifacts are written, the harness status is `complete`, and both validators pass, or (b) harness and exported `run_status: "incomplete"` record the exact reason and the gap is disclosed in the report. Never stop mid-phase.
 
 ## Anti-patterns
 

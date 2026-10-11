@@ -1,0 +1,7 @@
+interface:
+  display_name: "Vulnerability Harness"
+  short_description: "Persistent, independently verified security audits"
+  default_prompt: "Use $security-audit to run a resumable vulnerability audit of this repository."
+
+policy:
+  allow_implicit_invocation: true

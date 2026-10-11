@@ -1,8 +1,23 @@
 # security-audit
 
-A coding-agent skill that turns your agent into a security auditor. It orchestrates isolated agents through reconnaissance, coverage-led hunting, candidate validation, structured output, independent record verification, and target-neutral reporting.
+A Codex-ready skill and persistent vulnerability harness that turns your agent into a security auditor. It orchestrates isolated agents through reconnaissance, coverage-led hunting, candidate validation, structured output, independent record verification, and target-neutral reporting.
 
-This is the skill that seeded Cloudflare's vulnerability discovery harness, described in [Build your own vulnerability harness](https://blog.cloudflare.com/build-your-own-vulnerability-harness). The harness grew into a multi-stage, fleet-wide system; this skill is the single-repo starting point it evolved from.
+This repository is derived from Cloudflare's MIT-licensed skill that seeded its vulnerability discovery harness, described in [Build your own vulnerability harness](https://blog.cloudflare.com/build-your-own-vulnerability-harness). Cloudflare's fleet harness is not public; this port implements the article's recommended minimal starting point rather than claiming to reproduce that unpublished system.
+
+## Codex harness port
+
+The port adds a dependency-free Python/SQLite control plane around the original audit methodology:
+
+- persistent task state before parallelism, with atomic leases, resumable retries, and append-only events;
+- hard invocation budgets and deterministic task ordering;
+- separate proposal, validation, and verification records, with fresh-worker independence enforced by code;
+- exact-record verification, so a verifier cannot silently replace its own homework;
+- a persistent wishlist for missing sandboxes, fixtures, VMs, toolchains, or owner context;
+- detection of error-shaped `200 OK`/agent output before it can become a false successful task;
+- atomic machine-readable exports plus the existing findings and coverage validators; and
+- Windows-compatible validator input checks for Codex desktop hosts.
+
+The harness stores orchestration state; it does not execute target code or contact a model. The skill's sandbox, authorization, and evidence rules still apply.
 
 ## What it does
 
@@ -45,25 +60,31 @@ Multiple runs against the same repo are additive. The skill uses prior ledgers a
 | `validate-findings.test.cjs` | Findings-validator tests and producer-compatible fixture checks |
 | `validate-coverage-ledger.cjs` | Zero-dependency validator for `coverage-ledger.json` in Phases 1–5 |
 | `validate-coverage-ledger.test.cjs` | Coverage-ledger validator tests |
+| `references/CODEX-HARNESS.md` | Codex task mapping, crash recovery, finding-chain gates, and CLI workflow |
+| `scripts/vuln_harness.py` | Dependency-free SQLite task/finding/wishlist control plane |
+| `scripts/test_vuln_harness.py` | End-to-end harness tests |
+| `agents/openai.yaml` | Codex skill display metadata and default prompt |
 
 ## Installation
 
 Install the skill with the [Skills CLI](https://skills.sh):
 
 ```bash
-npx skills add https://github.com/cloudflare/security-audit-skill \
+npx skills add https://github.com/plu1337/security-audit-skill \
   --skill security-audit
 ```
 
 Use `--global` for a user-level installation:
 
 ```bash
-npx skills add https://github.com/cloudflare/security-audit-skill \
+npx skills add https://github.com/plu1337/security-audit-skill \
   --skill security-audit \
   --global
 ```
 
 Run `npx skills --help` for agent-selection and non-interactive options.
+
+For a direct Codex install, copy or link `skills/security-audit` into your Codex skills directory, then restart or reload Codex skill discovery.
 
 ## Usage
 
@@ -86,6 +107,7 @@ The skill activates automatically when the request matches its trigger (security
 ## Requirements
 
 - A coding agent with a model that supports tool use and parallel sub-agents
+- Python 3.10+ for the persistent harness CLI
 - Node.js for the zero-dependency findings and coverage-ledger validators
 - An OS-enforced sandbox for target-controlled builds, tests, processes, browsers, emulators, fuzzers, and fixtures. It must disable external networking, use a sanitized allowlisted environment, enforce resource limits, and allow writes only to assigned scratch paths. Without these controls, the workflow keeps the lead as `needs_validation` instead of executing target code.
 
@@ -96,6 +118,14 @@ The skill activates automatically when the request matches its trigger (security
 - **Severity requires impact.** Likelihood x impact, not deviation from a checklist.
 - **Defense-in-depth gaps are not vulnerabilities.** If Layer A prevents the attack, the absence of Layer B is a hardening note.
 - **Multiple runs improve coverage.** In our test runs, a single run found roughly half of the vulnerabilities that repeated runs found in total.
+
+## Validation
+
+```bash
+python -m unittest -v skills/security-audit/scripts/test_vuln_harness.py
+node --test skills/security-audit/validate-findings.test.cjs \
+  skills/security-audit/validate-coverage-ledger.test.cjs
+```
 
 ## Contact
 

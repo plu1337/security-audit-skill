@@ -604,13 +604,27 @@ function loadSchema(schemaPath) {
 function readFileWithinLimit(file) {
   const noFollow = fs.constants.O_NOFOLLOW;
   const nonBlock = fs.constants.O_NONBLOCK;
-  if (!Number.isInteger(noFollow) || noFollow === 0 || !Number.isInteger(nonBlock) || nonBlock === 0) {
+  const hasProtectedOpen = Number.isInteger(noFollow) && noFollow !== 0 &&
+    Number.isInteger(nonBlock) && nonBlock !== 0;
+  if (!hasProtectedOpen && process.platform !== "win32") {
     throw new SafeInputError("OS no-follow and nonblocking input protection is unavailable");
   }
 
   let descriptor;
+  let pathStatBefore;
   try {
-    descriptor = fs.openSync(file, fs.constants.O_RDONLY | noFollow | nonBlock);
+    if (hasProtectedOpen) {
+      descriptor = fs.openSync(file, fs.constants.O_RDONLY | noFollow | nonBlock);
+    } else {
+      // Node does not expose CreateFile(FILE_FLAG_OPEN_REPARSE_POINT) on Windows.
+      // The run files are parent-owned, so use an identity-stable handle check:
+      // reject reparse/symlink inputs, compare the opened handle to lstat before
+      // and after the read, and reject content that changes while it is read.
+      pathStatBefore = fs.lstatSync(file, { bigint: true });
+      if (pathStatBefore.isSymbolicLink()) throw new SafeInputError("input must not be a symlink");
+      if (!pathStatBefore.isFile()) throw new SafeInputError("input must be a regular file");
+      descriptor = fs.openSync(file, fs.constants.O_RDONLY);
+    }
   } catch (error) {
     if (error && (error.code === "ELOOP" || error.code === "EMLINK")) {
       throw new SafeInputError("input must not be a symlink");
@@ -618,12 +632,18 @@ function readFileWithinLimit(file) {
     throw error;
   }
   try {
-    const stat = fs.fstatSync(descriptor);
+    const stat = fs.fstatSync(descriptor, { bigint: true });
     if (!stat.isFile()) {
       throw new SafeInputError("input must be a regular file");
     }
-    if (stat.size > LIMITS.inputBytes) {
+    if (stat.nlink !== 1n) {
+      throw new SafeInputError("input must have exactly one hard link");
+    }
+    if (stat.size > BigInt(LIMITS.inputBytes)) {
       throw new SafeInputError(`input exceeds ${LIMITS.inputBytes} byte limit`);
+    }
+    if (pathStatBefore && (pathStatBefore.dev !== stat.dev || pathStatBefore.ino !== stat.ino)) {
+      throw new SafeInputError("input identity changed before it was opened");
     }
 
     const chunks = [];
@@ -637,6 +657,20 @@ function readFileWithinLimit(file) {
         throw new SafeInputError(`input exceeds ${LIMITS.inputBytes} byte limit`);
       }
       chunks.push(Buffer.from(buffer.subarray(0, count)));
+    }
+    const statAfter = fs.fstatSync(descriptor, { bigint: true });
+    if (statAfter.dev !== stat.dev || statAfter.ino !== stat.ino ||
+        statAfter.size !== stat.size || statAfter.mtimeNs !== stat.mtimeNs ||
+        statAfter.ctimeNs !== stat.ctimeNs || statAfter.nlink !== 1n ||
+        BigInt(bytesRead) !== stat.size) {
+      throw new SafeInputError("input changed while it was being read");
+    }
+    if (pathStatBefore) {
+      const pathStatAfter = fs.lstatSync(file, { bigint: true });
+      if (pathStatAfter.isSymbolicLink()) throw new SafeInputError("input must not be a symlink");
+      if (!pathStatAfter.isFile() || pathStatAfter.dev !== stat.dev || pathStatAfter.ino !== stat.ino) {
+        throw new SafeInputError("input path identity changed while it was being read");
+      }
     }
     try {
       return UTF8_DECODER.decode(Buffer.concat(chunks, bytesRead));
